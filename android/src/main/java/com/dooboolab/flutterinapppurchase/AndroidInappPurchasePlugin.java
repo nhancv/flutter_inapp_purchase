@@ -1,6 +1,11 @@
 package com.dooboolab.flutterinapppurchase;
 
 import androidx.annotation.Nullable;
+
+import android.app.Activity;
+import android.app.Application;
+import android.content.Context;
+import android.os.Bundle;
 import android.util.Log;
 
 import com.android.billingclient.api.AcknowledgePurchaseParams;
@@ -26,27 +31,78 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
 
+import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.FlutterException;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
-import io.flutter.plugin.common.PluginRegistry.Registrar;
 
 /** AndroidInappPurchasePlugin */
-public class AndroidInappPurchasePlugin implements MethodCallHandler {
-  public static Registrar reg;
+public class AndroidInappPurchasePlugin implements MethodCallHandler,  Application.ActivityLifecycleCallbacks {
   static private ArrayList<SkuDetails> skus;
   private final String TAG = "InappPurchasePlugin";
   private BillingClient billingClient;
-  private static MethodChannel channel;
+  private Context context;
+  private Activity activity;
+  private MethodChannel channel;
 
-  /** Plugin registration. */
-  public static void registerWith(Registrar registrar) {
-    channel = new MethodChannel(registrar.messenger(), "flutter_inapp");
-    channel.setMethodCallHandler(new FlutterInappPurchasePlugin());
-    reg = registrar;
+  AndroidInappPurchasePlugin() {
     skus = new ArrayList<>();
+  }
+
+  public void setContext(Context context) {
+    this.context = context;
+  }
+
+  public void setActivity(Activity activity) {
+    this.activity = activity;
+  }
+
+  public void setChannel(MethodChannel channel) {
+    this.channel = channel;
+  }
+
+  public void onDetachedFromActivity() {
+    endBillingClientConnection();
+  }
+
+  @Override
+  public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
+
+  }
+
+  @Override
+  public void onActivityStarted(Activity activity) {
+
+  }
+
+  @Override
+  public void onActivityResumed(Activity activity) {
+
+  }
+
+  @Override
+  public void onActivityPaused(Activity activity) {
+
+  }
+
+  @Override
+  public void onActivityDestroyed(Activity activity) {
+    if (this.activity == activity && this.context != null) {
+      ((Application) this.context).unregisterActivityLifecycleCallbacks(this);
+      endBillingClientConnection();
+    }
+  }
+
+  @Override
+  public void onActivityStopped(Activity activity) {
+
+  }
+
+  @Override
+  public void onActivitySaveInstanceState(Activity activity, Bundle outState) {
+
   }
 
   @Override
@@ -68,9 +124,9 @@ public class AndroidInappPurchasePlugin implements MethodCallHandler {
         return;
       }
 
-      billingClient = BillingClient.newBuilder(reg.context()).setListener(purchasesUpdatedListener)
-          .enablePendingPurchases()
-          .build();
+      billingClient = BillingClient.newBuilder(context).setListener(purchasesUpdatedListener)
+              .enablePendingPurchases()
+              .build();
       billingClient.startConnection(new BillingClientStateListener() {
         private boolean alreadyFinished = false;
 
@@ -148,7 +204,6 @@ public class AndroidInappPurchasePlugin implements MethodCallHandler {
         for (Purchase purchase : purchases) {
           final ConsumeParams consumeParams = ConsumeParams.newBuilder()
               .setPurchaseToken(purchase.getPurchaseToken())
-              .setDeveloperPayload(purchase.getDeveloperPayload())
               .build();
 
           final ConsumeResponseListener listener = new ConsumeResponseListener() {
@@ -267,7 +322,6 @@ public class AndroidInappPurchasePlugin implements MethodCallHandler {
             item.put("transactionReceipt", purchase.getOriginalJson());
             item.put("orderId", purchase.getOrderId());
             item.put("purchaseToken", purchase.getPurchaseToken());
-            item.put("developerPayloadAndroid", purchase.getDeveloperPayload());
             item.put("signatureAndroid", purchase.getSignature());
             item.put("purchaseStateAndroid", purchase.getPurchaseState());
 
@@ -314,7 +368,6 @@ public class AndroidInappPurchasePlugin implements MethodCallHandler {
               item.put("purchaseToken", purchase.getPurchaseToken());
               item.put("dataAndroid", purchase.getOriginalJson());
               item.put("signatureAndroid", purchase.getSignature());
-              item.put("developerPayload", purchase.getDeveloperPayload());
               items.put(item);
             }
             result.success(items.toString());
@@ -327,7 +380,7 @@ public class AndroidInappPurchasePlugin implements MethodCallHandler {
 
     /*
      * buyItemByType
-     * arguments: type, accountId, developerId,  sku, oldSku, prorationMode
+     * arguments: type, obfuscatedAccountId, obfuscatedProfileId, sku, oldSku, prorationMode, purchaseToken
      */
     else if (call.method.equals("buyItemByType")) {
       if (billingClient == null || !billingClient.isReady()) {
@@ -336,32 +389,33 @@ public class AndroidInappPurchasePlugin implements MethodCallHandler {
       }
 
       final String type = call.argument("type");
-      final String accountId = call.argument("accountId");
-      final String developerId = call.argument("developerId");
+      final String obfuscatedAccountId = call.argument("obfuscatedAccountId");
+      final String obfuscatedProfileId = call.argument("obfuscatedProfileId");
       final String sku = call.argument("sku");
       final String oldSku = call.argument("oldSku");
       final int prorationMode = call.argument("prorationMode");
+      final String purchaseToken = call.argument("purchaseToken");
 
       BillingFlowParams.Builder builder = BillingFlowParams.newBuilder();
 
       if (type.equals(BillingClient.SkuType.SUBS) && oldSku != null && !oldSku.isEmpty()) {
         // Subscription upgrade/downgrade
-        builder.setOldSku(oldSku);
+        builder.setOldSku(oldSku, purchaseToken);
       }
 
       if (type.equals(BillingClient.SkuType.SUBS) && oldSku != null && !oldSku.isEmpty()) {
         // Subscription upgrade/downgrade
         if (prorationMode != -1) {
-          builder.setOldSku(oldSku);
+          builder.setOldSku(oldSku, purchaseToken);
           if (prorationMode == BillingFlowParams.ProrationMode.IMMEDIATE_AND_CHARGE_PRORATED_PRICE) {
             builder.setReplaceSkusProrationMode(BillingFlowParams.ProrationMode.IMMEDIATE_AND_CHARGE_PRORATED_PRICE);
           } else if (prorationMode == BillingFlowParams.ProrationMode.IMMEDIATE_WITHOUT_PRORATION) {
             builder.setReplaceSkusProrationMode(BillingFlowParams.ProrationMode.IMMEDIATE_WITHOUT_PRORATION);
           } else {
-            builder.setOldSku(oldSku);
+            builder.setOldSku(oldSku, purchaseToken);
           }
         } else {
-          builder.setOldSku(oldSku);
+          builder.setOldSku(oldSku, purchaseToken);
         }
       }
 
@@ -382,25 +436,26 @@ public class AndroidInappPurchasePlugin implements MethodCallHandler {
         return;
       }
 
-      if (accountId != null) {
-        builder.setAccountId(accountId);
+      if (obfuscatedAccountId != null) {
+        builder.setObfuscatedAccountId(obfuscatedAccountId);
       }
-      if (developerId != null) {
-        builder.setDeveloperId(developerId);
+      if (obfuscatedProfileId != null) {
+        builder.setObfuscatedProfileId(obfuscatedProfileId);
       }
 
       builder.setSkuDetails(selectedSku);
       BillingFlowParams flowParams = builder.build();
-      billingClient.launchBillingFlow(reg.activity(), flowParams);
+      if (activity != null) {
+        billingClient.launchBillingFlow(activity, flowParams);
+      }
     }
 
     /*
      * acknowledgePurchase (For non-consumable purchases)
-     * arguments: token, developerPayload
+     * arguments: token
      */
     else if (call.method.equals("acknowledgePurchase")) {
       final String token = call.argument("token");
-      final String developerPayload = call.argument("developerPayload");
 
       if (billingClient == null || !billingClient.isReady()) {
         result.error(call.method, "IAP not prepared. Check if Google Play service is available.", "");
@@ -410,7 +465,6 @@ public class AndroidInappPurchasePlugin implements MethodCallHandler {
       AcknowledgePurchaseParams acknowledgePurchaseParams =
           AcknowledgePurchaseParams.newBuilder()
               .setPurchaseToken(token)
-              .setDeveloperPayload(developerPayload)
               .build();
       billingClient.acknowledgePurchase(acknowledgePurchaseParams, new AcknowledgePurchaseResponseListener() {
         @Override
@@ -437,7 +491,7 @@ public class AndroidInappPurchasePlugin implements MethodCallHandler {
 
     /*
      * consumeProduct (For consumable purchases)
-     * arguments: token, developerPayload
+     * arguments: token
      */
     else if (call.method.equals("consumeProduct")) {
       if (billingClient == null || !billingClient.isReady()) {
@@ -446,11 +500,9 @@ public class AndroidInappPurchasePlugin implements MethodCallHandler {
       }
 
       final String token = call.argument("token");
-      final String developerPayload = call.argument("developerPayload");
 
       final ConsumeParams params = ConsumeParams.newBuilder()
           .setPurchaseToken(token)
-          .setDeveloperPayload(developerPayload)
           .build();
       billingClient.consumeAsync(params, new ConsumeResponseListener() {
         @Override
@@ -515,7 +567,6 @@ public class AndroidInappPurchasePlugin implements MethodCallHandler {
             item.put("autoRenewingAndroid", purchase.isAutoRenewing());
             item.put("isAcknowledgedAndroid", purchase.isAcknowledged());
             item.put("purchaseStateAndroid", purchase.getPurchaseState());
-            item.put("developerPayloadAndroid", purchase.getDeveloperPayload());
             item.put("originalJsonAndroid", purchase.getOriginalJson());
 
 
@@ -535,4 +586,13 @@ public class AndroidInappPurchasePlugin implements MethodCallHandler {
       }
     }
   };
+
+  private void endBillingClientConnection() {
+    if (billingClient != null) {
+      try {
+        billingClient.endConnection();
+        billingClient = null;
+      } catch (Exception ignored) {}
+    }
+  }
 }

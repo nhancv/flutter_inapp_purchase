@@ -45,12 +45,12 @@ For help on editing plugin code, view the [documentation](https://flutter.io/dev
 | getPurchaseHistory | | `List<IAPItem>` | Gets an invetory of purchases made by the user regardless of consumption status (where possible) |
 | getAvailablePurchases | | `List<PurchasedItem>` | (aka restore purchase) Get all purchases made by the user (either non-consumable, or haven't been consumed yet)
 | getAppStoreInitiatedProducts | | `List<IAPItem>` | If the user has initiated a purchase directly on the App Store, the products that the user is attempting to purchase will be returned here. (iOS only) Note: On iOS versions earlier than 11.0 this method will always return an empty list, as the functionality was introduced in v11.0. [See Apple Docs for more info](https://developer.apple.com/documentation/storekit/skpaymenttransactionobserver/2877502-paymentqueue) Always returns an empty list on Android.
-| requestSubscription | `String` sku, `String` oldSkuAndroid?, `int` prorationModeAndroid?, `String` developerIdAndroid, `String` accountIdAndroid | Null | Create (request) a subscription to a sku. For upgrading/downgrading subscription on Android pass second parameter with current subscription ID, on iOS this is handled automatically by store. `purchaseUpdatedListener` will receive the result. |
-| requestPurchase | `String` sku, `String` developerIdAndroid, `String` accoundIdAndroid | Null | Request a purchase. `purchaseUpdatedListener` will receive the result. |
-| finishTransactionIOS | `String` purchaseToken | `PurchaseResult` | Send finishTransaction call to Apple IAP server. Call this function after receipt validation process |
-| acknowledgePurchaseAndroid | `String` purchaseToken, `String` developerPayload? | `PurchaseResult` | Acknowledge a product (on Android) for `non-consumable` and `subscription` purchase. No-op on iOS. |
-| consumePurchaseAndroid | `String` purchaseToken, `String` developerPayload? | `PurchaseResult` | Consume a product (on Android) for `consumable` purchase. No-op on iOS. |
-| finishTransaction | `String` purchaseToken, `String` developerPayloadAndroid?, `bool` isConsumable? } | `PurchaseResult` | Send finishTransaction call that abstracts all `acknowledgePurchaseAndroid`, `finishTransactionIOS`, `consumePurchaseAndroid` methods. |
+| requestSubscription | `String` sku, `String` oldSkuAndroid?, `int` prorationModeAndroid?, `String` obfuscatedAccountIdAndroid?, `String` obfuscatedProfileIdAndroid?, `String` purchaseTokenAndroid? | Null | Create (request) a subscription to a sku. For upgrading/downgrading subscription on Android pass second parameter with current subscription ID, on iOS this is handled automatically by store. `purchaseUpdatedListener` will receive the result. |
+| requestPurchase | `String` sku, `String` obfuscatedAccountIdAndroid?, `String` obfuscatedProfileIdAndroid?, `String` purchaseToken? | Null | Request a purchase. `purchaseUpdatedListener` will receive the result. |
+| finishTransactionIOS | `String` purchaseTokenAndroid | `PurchaseResult` | Send finishTransaction call to Apple IAP server. Call this function after receipt validation process |
+| acknowledgePurchaseAndroid | `String` purchaseToken | `PurchaseResult` | Acknowledge a product (on Android) for `non-consumable` and `subscription` purchase. No-op on iOS. |
+| consumePurchaseAndroid | `String` purchaseToken | `PurchaseResult` | Consume a product (on Android) for `consumable` purchase. No-op on iOS. |
+| finishTransaction | `String` purchaseToken, `bool` isConsumable? } | `PurchaseResult` | Send finishTransaction call that abstracts all `acknowledgePurchaseAndroid`, `finishTransactionIOS`, `consumePurchaseAndroid` methods. |
 | endConnection | | `String` | End billing connection. |
 | consumeAllItems | | `String` | Manually consume all items in android. Do NOT call if you have any non-consumables (one time purchase items). No-op on iOS. |
 | validateReceiptIos | `Map<String,String>` receiptBody, `bool` isTest | `http.Response` | Validate receipt for ios. |
@@ -59,7 +59,7 @@ For help on editing plugin code, view the [documentation](https://flutter.io/dev
 Purchase flow in `flutter_inapp_purchase@2.0.0+
 -----------------
 ![purchase-flow-sequence](https://github.com/dooboolab/react-native-iap/blob/master/docs/react-native-iapv3.svg)
-> When you've successfully received result from `purchaseUpdated` listener, you'll have to `verify` the purchase either by `acknowledgePurchaseAndroid`, `consumePurchaseAndroid`, `finishTransactionIOS` depending on the purchase types or platforms. You'll have to use `consumePurchasAndroid` for `consumable` products and `android` and `acknowledgePurchaseAndroid` for `non-consumable` products either `subscription`. For `ios`, there is no differences in `verifying` purchases. You can just call `finishTransaction`. If you do not verify the purchase, it will be refunded within 3 days to users. We recommend you to `verifyReceipt` first before actually finishing transaction. Lastly, if you want to abstract three different methods into one, consider using `finishTransaction` method.
+> When you've successfully received result from `purchaseUpdated` listener, you'll have to `verify` the purchase either by `acknowledgePurchaseAndroid`, `consumePurchaseAndroid`, `finishTransactionIOS` depending on the purchase types or platforms. You'll have to use `consumePurchaseAndroid` for `consumable` products and `android` and `acknowledgePurchaseAndroid` for `non-consumable` products either `subscription`. For `ios`, there is no differences in `verifying` purchases. You can just call `finishTransaction`. If you do not verify the purchase, it will be refunded within 3 days to users. We recommend you to `verifyReceipt` first before actually finishing transaction. Lastly, if you want to abstract three different methods into one, consider using `finishTransaction` method.
 
 ## Data Types
 * IAPItem
@@ -106,7 +106,6 @@ Purchase flow in `flutter_inapp_purchase@2.0.0+
   final bool autoRenewingAndroid;
   final bool isAcknowledgedAndroid;
   final int purchaseStateAndroid;
-  final String developerPayloadAndroid;
   final String originalJsonAndroid;
 
   // iOS only
@@ -232,7 +231,7 @@ void checkForAppStoreInitiatedProducts() async {
 Direct to [example readme](example/README.md) which is just a `cp` from example project. You can test this in real example project.
 
 ## ProGuard
-If you have eneabled proguard you will need to add the following rules to your `proguard-rules.pro`
+If you have enabled proguard you will need to add the following rules to your `proguard-rules.pro`
 
 ```
 #In app Purchase

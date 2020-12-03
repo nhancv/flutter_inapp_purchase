@@ -24,13 +24,15 @@ class IAPItem {
   /// ios only
   final String subscriptionPeriodNumberIOS;
   final String subscriptionPeriodUnitIOS;
+  final String introductoryPriceNumberIOS;
   final String introductoryPricePaymentModeIOS;
   final String introductoryPriceNumberOfPeriodsIOS;
   final String introductoryPriceSubscriptionPeriodIOS;
+  final List<DiscountIOS> discountsIOS;
 
   /// android only
   final String subscriptionPeriodAndroid;
-  final String introductoryPriceCyclesAndroid;
+  final int introductoryPriceCyclesAndroid;
   final String introductoryPricePeriodAndroid;
   final String freeTrialPeriodAndroid;
   final String signatureAndroid;
@@ -54,19 +56,21 @@ class IAPItem {
             json['introductoryPriceNumberOfPeriodsIOS'] as String,
         introductoryPriceSubscriptionPeriodIOS =
             json['introductoryPriceSubscriptionPeriodIOS'] as String,
+        introductoryPriceNumberIOS = json['introductoryPriceNumberIOS'] as String,
         subscriptionPeriodNumberIOS =
             json['subscriptionPeriodNumberIOS'] as String,
         subscriptionPeriodUnitIOS = json['subscriptionPeriodUnitIOS'] as String,
         subscriptionPeriodAndroid = json['subscriptionPeriodAndroid'] as String,
         introductoryPriceCyclesAndroid =
-            json['introductoryPriceCyclesAndroid'] as String,
+            json['introductoryPriceCyclesAndroid'] as int,
         introductoryPricePeriodAndroid =
             json['introductoryPricePeriodAndroid'] as String,
         freeTrialPeriodAndroid = json['freeTrialPeriodAndroid'] as String,
         signatureAndroid = json['signatureAndroid'] as String,
         iconUrl = json['iconUrl'] as String,
         originalJson = json['originalJson'] as String,
-        originalPrice = json['originalJson'] as String;
+        originalPrice = json['originalPrice'].toString(),
+        discountsIOS = _extractDiscountIOS(json['discounts']);
 
   /// wow, i find if i want to save a IAPItem, there is not "toJson" to cast it into String...
   /// i'm sorry to see that... so,
@@ -102,6 +106,7 @@ class IAPItem {
     data['iconUrl'] = this.iconUrl;
     data['originalJson'] = this.originalJson;
     data['originalPrice'] = this.originalPrice;
+    data['discounts'] = this.discountsIOS;
     return data;
   }
 
@@ -128,6 +133,68 @@ class IAPItem {
         'iconUrl: $iconUrl, '
         'originalJson: $originalJson, '
         'originalPrice: $originalPrice, '
+        'discounts: $discountsIOS, '
+    ;
+  }
+
+  static List<DiscountIOS> _extractDiscountIOS(dynamic json) {
+    List list = json as List;
+    List<DiscountIOS> discounts;
+
+    if (list != null) {
+      discounts = list
+          .map<DiscountIOS>(
+            (dynamic discount) => DiscountIOS.fromJSON(discount as Map<String, dynamic>),
+      )
+          .toList();
+    }
+
+
+    return discounts;
+  }
+}
+
+class DiscountIOS {
+  String identifier;
+  String type;
+  String numberOfPeriods;
+  double price;
+  String localizedPrice;
+  String paymentMode;
+  String subscriptionPeriod;
+
+  /// Create [DiscountIOS] from a Map that was previously JSON formatted
+  DiscountIOS.fromJSON(Map<String, dynamic> json)
+      : identifier = json['identifier'] as String,
+        type = json['type'] as String,
+        numberOfPeriods = json['numberOfPeriods'] as String,
+        price = json['price'] as double,
+        localizedPrice = json['localizedPrice'] as String,
+        paymentMode = json['paymentMode'] as String,
+        subscriptionPeriod = json['subscriptionPeriod'] as String;
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = new Map<String, dynamic>();
+    data['identifier'] = this.identifier;
+    data['type'] = this.type;
+    data['numberOfPeriods'] = this.numberOfPeriods;
+    data['price'] = this.price;
+    data['localizedPrice'] = this.localizedPrice;
+    data['paymentMode'] = this.paymentMode;
+    data['subscriptionPeriod'] = this.subscriptionPeriod;
+    return data;
+  }
+
+  /// Return the contents of this class as a string
+  @override
+  String toString() {
+    return 'identifier: $identifier, '
+        'type: $type, '
+        'numberOfPeriods: $numberOfPeriods, '
+        'price: $price, '
+        'localizedPrice: $localizedPrice, '
+        'paymentMode: $paymentMode, '
+        'subscriptionPeriod: $subscriptionPeriod, '
     ;
   }
 }
@@ -146,8 +213,7 @@ class PurchasedItem {
   final String signatureAndroid;
   final bool autoRenewingAndroid;
   final bool isAcknowledgedAndroid;
-  final int purchaseStateAndroid;
-  final String developerPayloadAndroid;
+  final PurchaseState purchaseStateAndroid;
   final String originalJsonAndroid;
 
   // iOS only
@@ -168,8 +234,8 @@ class PurchasedItem {
         signatureAndroid = json['signatureAndroid'] as String,
         isAcknowledgedAndroid = json['isAcknowledgedAndroid'] as bool,
         autoRenewingAndroid = json['autoRenewingAndroid'] as bool,
-        purchaseStateAndroid = json['purchaseStateAndroid'] as int,
-        developerPayloadAndroid = json['developerPayloadAndroid'] as String,
+        purchaseStateAndroid =
+            _decodePurchaseStateAndroid(json['purchaseStateAndroid'] as int),
         originalJsonAndroid = json['originalJsonAndroid'] as String,
 
         originalTransactionDateIOS =
@@ -194,7 +260,6 @@ class PurchasedItem {
         'isAcknowledgedAndroid: $isAcknowledgedAndroid, '
         'autoRenewingAndroid: $autoRenewingAndroid, '
         'purchaseStateAndroid: $purchaseStateAndroid, '
-        'developerPayloadAndroid: $developerPayloadAndroid, '
         'originalJsonAndroid: $originalJsonAndroid, '
         /// ios specific
         'originalTransactionDateIOS: ${originalTransactionDateIOS?.toIso8601String()}, '
@@ -299,6 +364,28 @@ TransactionState _decodeTransactionStateIOS(int rawValue) {
       return TransactionState.restored;
     case 4:
       return TransactionState.deferred;
+    default:
+      return null;
+  }
+}
+
+/// See also https://developer.android.com/reference/com/android/billingclient/api/Purchase.PurchaseState
+enum PurchaseState {
+  pending,
+
+  purchased,
+
+  unspecified,
+}
+
+PurchaseState _decodePurchaseStateAndroid(int rawValue) {
+  switch (rawValue) {
+    case 0:
+      return PurchaseState.unspecified;
+    case 1:
+      return PurchaseState.purchased;
+    case 2:
+      return PurchaseState.pending;
     default:
       return null;
   }
